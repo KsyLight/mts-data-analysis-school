@@ -8,13 +8,13 @@ import jwt
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey
 from sqlalchemy.orm import sessionmaker, relationship, Session, declarative_base
 
-# --- Конфигурация БД ---
+# Конфигурация БД
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"  # База SQLite в файле
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# --- SQLAlchemy модели ---
+# SQLAlchemy модели
 class SellerModel(Base):
     __tablename__ = "sellers"
     id = Column(Integer, primary_key=True, index=True)
@@ -34,7 +34,7 @@ class BookModel(Base):
 
 Base.metadata.create_all(bind=engine)
 
-# --- Pydantic схемы ---
+# Pydantic схемы
 class SellerCreate(BaseModel):
     id: int
     first_name: str
@@ -71,7 +71,7 @@ class SellerDetail(BaseModel):
     seller: SellerOut
     books: List[BookOut]
 
-# --- JWT настройки ---
+# JWT настройки
 JWT_SECRET = "your_jwt_secret"  # Замените на ваш секретный ключ
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
@@ -112,7 +112,7 @@ def verify_token(token: str = Depends(oauth2_scheme), db: Session = Depends(get_
 
 # --- Эндпоинты приложения ---
 
-# 1. Регистрация продавца
+# Регистрация продавца
 @app.post("/api/v1/seller", response_model=SellerOut)
 def create_seller(seller: SellerCreate, db: Session = Depends(get_db)):
     existing = db.query(SellerModel).filter(
@@ -126,13 +126,13 @@ def create_seller(seller: SellerCreate, db: Session = Depends(get_db)):
     db.refresh(new_seller)
     return new_seller
 
-# 2. Получение списка продавцов (без поля password)
+# Получение списка продавцов (без поля password)
 @app.get("/api/v1/seller", response_model=List[SellerOut])
 def get_sellers(db: Session = Depends(get_db)):
     sellers = db.query(SellerModel).all()
     return sellers
 
-# 3. Получение данных продавца с книгами (защищён JWT)
+# Получение данных продавца с книгами (защищён JWT)
 @app.get("/api/v1/seller/{seller_id}", response_model=SellerDetail)
 def get_seller(seller_id: int, token_seller: SellerModel = Depends(verify_token), db: Session = Depends(get_db)):
     seller = db.query(SellerModel).filter(SellerModel.id == seller_id).first()
@@ -140,7 +140,7 @@ def get_seller(seller_id: int, token_seller: SellerModel = Depends(verify_token)
         raise HTTPException(status_code=404, detail="Seller not found")
     return {"seller": seller, "books": seller.books}
 
-# 4. Обновление данных продавца (без изменения пароля и книг) – защищён JWT
+# Обновление данных продавца (без изменения пароля и книг) – защищён JWT
 @app.put("/api/v1/seller/{seller_id}", response_model=SellerOut)
 def update_seller(seller_id: int, updated_data: SellerUpdate, token_seller: SellerModel = Depends(verify_token), db: Session = Depends(get_db)):
     seller = db.query(SellerModel).filter(SellerModel.id == seller_id).first()
@@ -153,7 +153,7 @@ def update_seller(seller_id: int, updated_data: SellerUpdate, token_seller: Sell
     db.refresh(seller)
     return seller
 
-# 5. Удаление продавца (и связанных книг) – защищён JWT
+# Удаление продавца (и связанных книг) – защищён JWT
 @app.delete("/api/v1/seller/{seller_id}")
 def delete_seller(seller_id: int, token_seller: SellerModel = Depends(verify_token), db: Session = Depends(get_db)):
     seller = db.query(SellerModel).filter(SellerModel.id == seller_id).first()
@@ -163,7 +163,7 @@ def delete_seller(seller_id: int, token_seller: SellerModel = Depends(verify_tok
     db.commit()
     return {"detail": "Seller and associated books deleted"}
 
-# 6. Получение JWT токена по e_mail и password
+# Получение JWT токена по e_mail и password
 @app.post("/api/v1/token")
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     seller = db.query(SellerModel).filter(
@@ -175,7 +175,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     access_token = create_access_token(data={"sub": str(seller.id)})
     return {"access_token": access_token, "token_type": "bearer"}
 
-# 7. Создание книги – защищён JWT
+# Создание книги – защищён JWT
 @app.post("/api/v1/books/", response_model=BookOut)
 def create_book(book: BookCreate, token_seller: SellerModel = Depends(verify_token), db: Session = Depends(get_db)):
     existing = db.query(BookModel).filter(BookModel.id == book.id).first()
@@ -187,7 +187,7 @@ def create_book(book: BookCreate, token_seller: SellerModel = Depends(verify_tok
     db.refresh(new_book)
     return new_book
 
-# 8. Обновление книги – защищён JWT
+# Обновление книги – защищён JWT
 @app.put("/api/v1/books/{book_id}", response_model=BookOut)
 def update_book(book_id: int, updated_book: BookCreate, token_seller: SellerModel = Depends(verify_token), db: Session = Depends(get_db)):
     book = db.query(BookModel).filter(BookModel.id == book_id).first()
