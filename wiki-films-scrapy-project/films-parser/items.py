@@ -6,7 +6,7 @@
 import scrapy
 
 
-class FilmsParserItem(scrapy.Item):
+class OptimizedfilmparserItem(scrapy.Item):
     # define the fields for your item here like:
     # name = scrapy.Field()
     pass

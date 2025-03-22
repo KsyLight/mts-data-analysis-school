@@ -1,4 +1,4 @@
-# Scrapy settings for films_parser project
+# Scrapy settings for OptimizedFilmParser project
 #
 # For simplicity, this file contains only settings considered important or
 # commonly used. You can find more settings consulting the documentation:
@@ -7,17 +7,17 @@
 #     https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
 #     https://docs.scrapy.org/en/latest/topics/spider-middleware.html
 
-BOT_NAME = "films_parser"
+BOT_NAME = "OptimizedFilmParser"
 
-SPIDER_MODULES = ["films_parser.spiders"]
-NEWSPIDER_MODULE = "films_parser.spiders"
+SPIDER_MODULES = ["OptimizedFilmParser.spiders"]
+NEWSPIDER_MODULE = "OptimizedFilmParser.spiders"
 
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
-#USER_AGENT = "films_parser (+http://www.yourdomain.com)"
+#USER_AGENT = "OptimizedFilmParser (+http://www.yourdomain.com)"
 
 # Obey robots.txt rules
-ROBOTSTXT_OBEY = False
+ROBOTSTXT_OBEY = True
 
 # Configure maximum concurrent requests performed by Scrapy (default: 16)
 #CONCURRENT_REQUESTS = 32
@@ -45,13 +45,13 @@ ROBOTSTXT_OBEY = False
 # Enable or disable spider middlewares
 # See https://docs.scrapy.org/en/latest/topics/spider-middleware.html
 #SPIDER_MIDDLEWARES = {
-#    "films_parser.middlewares.FilmsParserSpiderMiddleware": 543,
+#    "OptimizedFilmParser.middlewares.OptimizedfilmparserSpiderMiddleware": 543,
 #}
 
 # Enable or disable downloader middlewares
 # See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
 #DOWNLOADER_MIDDLEWARES = {
-#    "films_parser.middlewares.FilmsParserDownloaderMiddleware": 543,
+#    "OptimizedFilmParser.middlewares.OptimizedfilmparserDownloaderMiddleware": 543,
 #}
 
 # Enable or disable extensions
@@ -63,7 +63,7 @@ ROBOTSTXT_OBEY = False
 # Configure item pipelines
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 #ITEM_PIPELINES = {
-#    "films_parser.pipelines.FilmsParserPipeline": 300,
+#    "OptimizedFilmParser.pipelines.OptimizedfilmparserPipeline": 300,
 #}
 
 # Enable and configure the AutoThrottle extension (disabled by default)
@@ -90,10 +90,3 @@ ROBOTSTXT_OBEY = False
 # Set settings whose default value is deprecated to a future-proof value
 TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
 FEED_EXPORT_ENCODING = "utf-8"
-
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-
-DOWNLOAD_DELAY = 1  # 1 секунда между запросами
-
-
-CLOSESPIDER_ITEMCOUNT = 10
