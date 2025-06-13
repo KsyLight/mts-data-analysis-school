@@ -1,77 +1,120 @@
+#!/usr/bin/env python
 import os
-import sys
-import pandas as pd
 import time
 import logging
-from watchdog.observers import Observer
+import sys
+import pandas as pd
+import matplotlib.pyplot as plt
+import mplcyberpunk
+from watchdog.observers.polling import PollingObserver as Observer
 from watchdog.events import FileSystemEventHandler
-from datetime import datetime
 
-sys.path.append(os.path.abspath('./src'))
-from preprocessing import load_train_data, run_preproc
-from scorer import make_pred
+from src.preprocessing import preprocess
+from src.scorer        import make_pred, get_feature_importance
+
+plt.style.use('cyberpunk')
+
+INPUT_DIR  = "/app/input"
+OUTPUT_DIR = "/app/output"
+LOG_DIR    = "/app/logs"
 
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.DEBUG,
+    format="%(asctime)s %(levelname)s %(message)s",
     handlers=[
-        logging.FileHandler('/app/logs/service.log'),
-        logging.StreamHandler()
+        logging.FileHandler(os.path.join(LOG_DIR, "service.log"), encoding="utf-8"),
+        logging.StreamHandler(sys.stdout),
     ]
 )
 logger = logging.getLogger(__name__)
 
-
-class ProcessingService:
-    def __init__(self):
-        logger.info('Initializing ProcessingService...')
-        self.input_dir = '/app/input'
-        self.output_dir = '/app/output'
-        self.train = load_train_data()
-        logger.info('Service initialized')
-
-    def process_single_file(self, file_path):
-        try:
-            logger.info('Processing file: %s', file_path)
-            input_df = pd.read_csv(file_path).drop(columns=['name_1', 'name_2', 'street', 'post_code'])
-
-            logger.info('Starting preprocessing')
-            processed_df = run_preproc(self.train, input_df)
-            
-            logger.info('Making prediction')
-            submission = make_pred(processed_df, file_path)
-            
-            logger.info('Prepraring submission file')
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_filename = f"predictions_{timestamp}_{os.path.basename(file_path)}"
-            submission.to_csv(os.path.join(self.output_dir, output_filename), index=False)
-            logger.info('Predictions saved to: %s', output_filename)
-
-        except Exception as e:
-            logger.error('Error processing file %s: %s', file_path, e, exc_info=True)
-            return
-
-
-class FileHandler(FileSystemEventHandler):
-    def __init__(self, service):
-        self.service = service
-
+class Handler(FileSystemEventHandler):
     def on_created(self, event):
-        if not event.is_directory and event.src_path.endswith(".csv"):
-            logger.debug('New file detected: %s', event.src_path)
-            self.service.process_single_file(event.src_path)
+        logger.debug(f"on_created: {event.src_path}")
+        if not event.is_directory and event.src_path.lower().endswith(".csv"):
+            self.process(event.src_path)
+
+    def on_modified(self, event):
+        logger.debug(f"on_modified: {event.src_path}")
+        if not event.is_directory and event.src_path.lower().endswith(".csv"):
+            self.process(event.src_path)
+
+    def process(self, path: str):
+        try:
+            logger.info(f"=== Обработка {path} ===")
+            df = pd.read_csv(path)
+            if "id" in df.columns:
+                df.set_index("id", inplace=True)
+                logger.info("Индекс по 'id' установлен")
+
+            X = preprocess(df)
+            logger.info(f"После preprocess: {X.shape}")
+
+            preds, proba, idx = make_pred(X, path)
+            logger.info("Сделан скоринг")
+
+            os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+            # sample_submission.csv
+            sub = pd.DataFrame({"id": idx, "target": preds})
+            sub.to_csv(os.path.join(OUTPUT_DIR, "sample_submission.csv"), index=False)
+            logger.info("sample_submission.csv сохранён")
+
+            # feature_importance.json
+            fi_df = get_feature_importance(5)
+            fi = {r["Feature Id"]: float(r["Importances"]) for r in fi_df.to_dict("records")}
+            import json
+            with open(os.path.join(OUTPUT_DIR, "feature_importance.json"), "w", encoding="utf-8") as f:
+                json.dump(fi, f, indent=2, ensure_ascii=False)
+            logger.info("feature_importance.json сохранён")
+
+            # pred_density.png
+            plt.switch_backend("Agg")
+            plt.figure(figsize=(8, 6))
+            
+            # Гистограмма плотности
+            pd.Series(proba, name="proba")\
+              .plot(kind="hist", bins=40, density=True, alpha=0.6, label="Гистограмма")
+            
+            # KDE-кривая
+            pd.Series(proba).plot(kind="kde", label="KDE")
+            plt.title("Плотность предсказанных вероятностей", fontsize=14)
+            plt.xlabel("Вероятность", fontsize=12)
+            plt.ylabel("Плотность", fontsize=12)
+            plt.grid(True, linestyle="--", linewidth=0.5)
+            plt.legend()
+            plt.tight_layout()
+            beaut_path = os.path.join(OUTPUT_DIR, "pred_density.png")
+            plt.savefig(beaut_path, dpi=300)
+            plt.close()
+            logger.info(f"pred_density.png сохранён ➜ {beaut_path}")
+
+
+        except Exception:
+            logger.exception(f"Ошибка при обработке {path}")
 
 if __name__ == "__main__":
-    logger.info('Starting ML scoring service...')
-    service = ProcessingService()
+    os.makedirs(INPUT_DIR,  exist_ok=True)
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    os.makedirs(LOG_DIR,    exist_ok=True)
+
+    handler = Handler()
+
+    # Startup scan
+    for fn in os.listdir(INPUT_DIR):
+        if fn.lower().endswith(".csv"):
+            p = os.path.join(INPUT_DIR, fn)
+            logger.info(f"[startup scan] обрабатываю {p}")
+            handler.process(p)
+
     observer = Observer()
-    observer.schedule(FileHandler(service), path=service.input_dir, recursive=False)
+    observer.schedule(handler, INPUT_DIR, recursive=False)
     observer.start()
-    logger.info('File observer started')
+    logger.info("Сервис запущен, ждём CSV…")
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        logger.info('Service stopped by user')
         observer.stop()
     observer.join()
+    logger.info("Сервис остановлен.")
