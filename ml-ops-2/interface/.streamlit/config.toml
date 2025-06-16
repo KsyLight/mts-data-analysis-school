@@ -1,0 +1,4 @@
+[server]
+maxUploadSize = 500  # Максимальный размер файла в MB
+headless = true
+enableCORS = false

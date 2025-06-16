@@ -1,0 +1,148 @@
+version: '3.8'
+
+networks:
+  ml-scorer:
+    name: ml-scorer
+    driver: bridge
+
+services:
+  # Zookeeper (обязателен для работы Kafka)
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.3.0
+    networks:
+      - ml-scorer
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+
+  # Kafka-брокер
+  kafka:
+    image: confluentinc/cp-kafka:7.3.0
+    depends_on:
+      - zookeeper
+    networks:
+      - ml-scorer
+    ports:
+      - "9095:9095"   # внешний порт для хост-клиентов
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      # Два листенера: внутренний (kafka:9092) и внешний (localhost:9095)
+      KAFKA_ADVERTISED_LISTENERS: >
+        PLAINTEXT://kafka:9092,
+        PLAINTEXT_HOST://localhost:9095
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"  # отключаем автосоздание топиков
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "kafka-topics --bootstrap-server localhost:9095 --list"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+
+  # Авто-создание топиков transactions и scores
+  kafka-setup:
+    image: confluentinc/cp-kafka:7.3.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - ml-scorer
+    restart: on-failure
+    entrypoint: ["/bin/bash", "-c"]
+    command: |
+      "
+      echo 'Ждём готовности Kafka…';
+      until kafka-topics --bootstrap-server kafka:9092 --list; do sleep 1; done;
+
+      echo 'Создаём топики…';
+      kafka-topics --bootstrap-server kafka:9092 \
+        --create --if-not-exists --topic transactions \
+        --partitions 3 --replication-factor 1 \
+        --config retention.ms=604800000;
+      kafka-topics --bootstrap-server kafka:9092 \
+        --create --if-not-exists --topic scores \
+        --partitions 3 --replication-factor 1 \
+        --config retention.ms=604800000;
+
+      echo 'Готово, топики:'; kafka-topics --bootstrap-server kafka:9092 --list;
+      "
+
+  # Веб-интерфейс для Kafka (просмотр топиков и сообщений)
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    depends_on:
+      - kafka
+    networks:
+      - ml-scorer
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+
+  # Сервис скоринга (fraud_detector)
+  fraud_detector:
+    build:
+      context: ./fraud_detector
+      dockerfile: Dockerfile
+    networks:
+      - ml-scorer
+    depends_on:
+      - kafka
+      - kafka-setup
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+      KAFKA_TRANSACTIONS_TOPIC: "transactions"
+      KAFKA_SCORING_TOPIC: "scores"
+
+  # PostgreSQL для хранения результатов скоринга
+  postgres:
+    image: postgres:15
+    networks:
+      - ml-scorer
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: transactions
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  # Сервис-писатель в базу (writer_service)
+  writer:
+    build:
+      context: ./writer_service
+      dockerfile: Dockerfile
+    networks:
+      - ml-scorer
+    depends_on:
+      - kafka
+      - postgres
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      INPUT_TOPIC: scores
+      POSTGRES_DSN: postgresql://postgres:postgres@postgres:5432/transactions
+
+  # UI-сервис на Streamlit (interface)
+  ui:
+    build:
+      context: ./interface
+      dockerfile: Dockerfile
+    networks:
+      - ml-scorer
+    depends_on:
+      - writer
+    ports:
+      - "8501:8501"
+    environment:
+      POSTGRES_DSN: postgresql://postgres:postgres@postgres:5432/transactions
+
+volumes:
+  postgres_data:
