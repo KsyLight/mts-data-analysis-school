@@ -1,83 +1,80 @@
-version: '3.8'
-
 networks:
   ml-scorer:
-    name: ml-scorer
     driver: bridge
 
+volumes:
+  postgres_data:
+
 services:
-  # Zookeeper (обязателен для работы Kafka)
+  # Zookeeper
   zookeeper:
     image: confluentinc/cp-zookeeper:7.3.0
-    networks:
-      - ml-scorer
+    networks: [ml-scorer]
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
     ports:
       - "2181:2181"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo ruok | nc 127.0.0.1 2181 | grep imok"]
+      interval: 10s
+      retries: 5
 
   # Kafka-брокер
   kafka:
     image: confluentinc/cp-kafka:7.3.0
-    depends_on:
-      - zookeeper
-    networks:
-      - ml-scorer
-    ports:
-      - "9095:9095"   # внешний порт для хост-клиентов
+    networks: [ml-scorer]
+    depends_on: [zookeeper]
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      # Два листенера: внутренний (kafka:9092) и внешний (localhost:9095)
-      KAFKA_ADVERTISED_LISTENERS: >
-        PLAINTEXT://kafka:9092,
-        PLAINTEXT_HOST://localhost:9095
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"  # отключаем автосоздание топиков
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    ports:
+      - "9092:9092"
     healthcheck:
-      test: ["CMD", "bash", "-lc", "kafka-topics --bootstrap-server localhost:9095 --list"]
+      test: ["CMD", "bash", "-c", "kafka-topics --bootstrap-server localhost:9092 --list"]
       interval: 5s
       timeout: 10s
       retries: 10
 
-  # Авто-создание топиков transactions и scores
+  # Ждёт готовности брокера и создаёт топики
+  # Скрипт, который один раз запустится, дождётся Kafka и создаст топики
   kafka-setup:
     image: confluentinc/cp-kafka:7.3.0
-    depends_on:
-      kafka:
-        condition: service_healthy
-    networks:
-      - ml-scorer
-    restart: on-failure
-    entrypoint: ["/bin/bash", "-c"]
-    command: |
-      "
-      echo 'Ждём готовности Kafka…';
-      until kafka-topics --bootstrap-server kafka:9092 --list; do sleep 1; done;
+    networks: [ml-scorer]
+    depends_on: [kafka]
+    restart: "no"   # один запуск
+    command:
+      - bash
+      - -c
+      - |
+        echo "Waiting for Kafka…"
+        while ! kafka-topics --bootstrap-server kafka:9092 --list >/dev/null 2>&1; do
+          sleep 1
+        done
 
-      echo 'Создаём топики…';
-      kafka-topics --bootstrap-server kafka:9092 \
-        --create --if-not-exists --topic transactions \
-        --partitions 3 --replication-factor 1 \
-        --config retention.ms=604800000;
-      kafka-topics --bootstrap-server kafka:9092 \
-        --create --if-not-exists --topic scores \
-        --partitions 3 --replication-factor 1 \
-        --config retention.ms=604800000;
+        echo "Creating topics…"
+        kafka-topics --bootstrap-server kafka:9092 \
+          --create --if-not-exists --topic transactions \
+          --partitions 3 --replication-factor 1 \
+          --config retention.ms=604800000
 
-      echo 'Готово, топики:'; kafka-topics --bootstrap-server kafka:9092 --list;
-      "
+        kafka-topics --bootstrap-server kafka:9092 \
+          --create --if-not-exists --topic scores \
+          --partitions 3 --replication-factor 1 \
+          --config retention.ms=604800000
 
-  # Веб-интерфейс для Kafka (просмотр топиков и сообщений)
+        echo "Done. Topics:" && kafka-topics --bootstrap-server kafka:9092 --list
+
+  # UI для Kafka
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
-    depends_on:
-      - kafka
-    networks:
-      - ml-scorer
+    networks: [ml-scorer]
+    depends_on: [kafka]
     ports:
       - "8080:8080"
     environment:
@@ -85,26 +82,21 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
 
-  # Сервис скоринга (fraud_detector)
+  # Сервис скоринга
   fraud_detector:
     build:
       context: ./fraud_detector
-      dockerfile: Dockerfile
-    networks:
-      - ml-scorer
-    depends_on:
-      - kafka
-      - kafka-setup
+    networks: [ml-scorer]
+    depends_on: [kafka-setup]
     environment:
-      KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
-      KAFKA_TRANSACTIONS_TOPIC: "transactions"
-      KAFKA_SCORING_TOPIC: "scores"
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TRANSACTIONS_TOPIC: transactions
+      KAFKA_SCORING_TOPIC: scores
 
-  # PostgreSQL для хранения результатов скоринга
+  # Postgres
   postgres:
     image: postgres:15
-    networks:
-      - ml-scorer
+    networks: [ml-scorer]
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -115,34 +107,24 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
 
-  # Сервис-писатель в базу (writer_service)
+  # Пишем скоры в БД
   writer:
     build:
       context: ./writer_service
-      dockerfile: Dockerfile
-    networks:
-      - ml-scorer
-    depends_on:
-      - kafka
-      - postgres
+    networks: [ml-scorer]
+    depends_on: [kafka-setup, postgres]
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       INPUT_TOPIC: scores
       POSTGRES_DSN: postgresql://postgres:postgres@postgres:5432/transactions
 
-  # UI-сервис на Streamlit (interface)
+  # Streamlit-интерфейс
   ui:
     build:
       context: ./interface
-      dockerfile: Dockerfile
-    networks:
-      - ml-scorer
-    depends_on:
-      - writer
+    networks: [ml-scorer]
+    depends_on: [writer]
     ports:
       - "8501:8501"
     environment:
       POSTGRES_DSN: postgresql://postgres:postgres@postgres:5432/transactions
-
-volumes:
-  postgres_data:

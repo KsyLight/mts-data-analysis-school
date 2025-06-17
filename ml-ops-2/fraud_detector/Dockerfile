@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Копируем код и модель
 COPY src/   ./src/
 COPY app/   ./app/
-COPY models/my_catboost.cbm ./models/
+COPY models/cb_ml1_alg.cbm ./models/
 
 # Чтобы внутри контейнера корректно работал import src.*
 ENV PYTHONPATH=/app

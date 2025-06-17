@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 # Загружаем сохранённую модель
 model = CatBoostClassifier()
-model.load_model("./models/my_catboost.cbm")
+model.load_model("./models/cb_ml1_alg.cbm")
 logger.info("CatBoost модель загружена из ./models/my_catboost.cbm")
 
 # Порог для бинаризации
