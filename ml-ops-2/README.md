@@ -84,13 +84,26 @@ graph TD
   git lfs install
   ```
 
-### 2. Клонирование + модель
+### 2. Клонирование одной папки
 
-```bash
-git clone https://github.com/<ВАШ_НИК>/fraud-detection-system.git
-cd fraud-detection-system
-git lfs pull   # скачает *.cbm
-```
+Если нужен только каталог ml-ops-2, используйте sparse‑checkout (требуется Git ≥ 2.25):
+
+  ```bash
+git clone --filter=blob:none --sparse https://github.com/KsyLight/mts-data-analysis-school.git
+cd mts-data-analysis-school
+git sparse-checkout set ml-ops-2
+cd ml-ops-2
+
+git lfs pull   # скачает cb_ml1_alg.cbm
+  ```
+
+Альтернатива (проще, но клонирует весь репозиторий):
+
+  ```bash
+git clone https://github.com/KsyLight/mts-data-analysis-school.git
+cd mts-data-analysis-school/ml-ops-2
+git lfs pull
+  ```
 
 ### 3. Запуск всего стека
 
