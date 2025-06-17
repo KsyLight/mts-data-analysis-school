@@ -51,7 +51,7 @@ graph TD
 │   │   ├── preprocessing.py  # feature engineering
 │   │   └── scorer.py         # CatBoost wrapper
 │   ├── models/
-│   │   └── my_catboost.cbm   # >100 MB, хранится через Git LFS
+│   │   └── cb_ml1_alg.cbm   # >100 MB, хранится через Git LFS
 │   └── Dockerfile
 ├── writer_service/
 │   ├── src/writer.py
