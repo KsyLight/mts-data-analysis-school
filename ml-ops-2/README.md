@@ -78,7 +78,7 @@ graph TD
 ### 1. Предусловия
 
 * **Docker ≥ 20.10** и **Docker Compose v2**
-* (опц.) **Git LFS** — если модель > 100 MB
+* **Git LFS** — модель > 100 MB
 
   ```bash
   git lfs install
