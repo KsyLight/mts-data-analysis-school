@@ -32,11 +32,16 @@ graph TD
 | **kafka-setup** | Cоздание топиков (*1 раз*)         | — |
 | **kafka-ui**    | Веб-обзор Kafka                    | 8080 |
 
-* **interface/** Streamlit‑приложение, эмулирует поток транзакций (порт **8501**).
-* **fraud\_detector/** ML‑сервис: kafka‑consumer → `preprocess.py` → CatBoost → kafka‑producer.
-* **writer\_service/** Слушает топик `scoring`, пишет JSON в таблицу `scores`.
-* **kafka‑setup** Одноразовый скрипт: создаёт топики `transactions` и `scoring`.
-* **kafka‑ui** Веб‑морда брокера (порт **8080**).
+* **interface/**
+> Streamlit‑приложение, эмулирует поток транзакций (порт **8501**).
+* **fraud\_detector/**
+> ML‑сервис: kafka‑consumer → `preprocess.py` → CatBoost → kafka‑producer.
+* **writer\_service/**
+> Слушает топик `scoring`, пишет JSON в таблицу `scores`.
+* **kafka‑setup**
+> Одноразовый скрипт: создаёт топики `transactions` и `scoring`.
+* **kafka‑ui**
+> Веб‑морда брокера (порт **8080**).
 ---
 
 ## Структура репозитория
