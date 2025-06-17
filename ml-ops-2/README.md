@@ -1,8 +1,4 @@
-# Real-Time Fraud Detection System
-
-## Быстрый старт
-
-# Real‑Time Fraud Detection System (v1)
+# Real‑Time Fraud Detection System
 
 Система показывает, как организовать потоковый скоринг транзакций на лету:
 
