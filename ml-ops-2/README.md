@@ -48,7 +48,7 @@ graph TD
 ├── fraud_detector/
 │   ├── app/                  # main.py + utils
 │   ├── src/
-│   │   ├── preprocessing.py  # feature engineering
+│   │   ├── preprocessing.py  # Скрипт предобработки
 │   │   └── scorer.py         # CatBoost wrapper
 │   ├── models/
 │   │   └── cb_ml1_alg.cbm   # >100 MB, хранится через Git LFS
